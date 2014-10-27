@@ -13,6 +13,7 @@ import Ska.arc5gl
 from Ska.Shell import getenv, bash, tcsh_shell, ShellError
 from astropy.io import fits
 
+
 def get_options():
     from optparse import OptionParser
     parser = OptionParser()
@@ -44,7 +45,7 @@ def get_options():
     parser.add_option("--range",
                       help="processing range specifier")
     parser.add_option("--dir",
-                      default=".",
+                      default="pipeline_out",
                       help="directory for telem fetching")
     opt, args = parser.parse_args()
     return opt, args
