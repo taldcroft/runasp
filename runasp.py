@@ -3,7 +3,6 @@ import os
 import sys
 import re
 from glob import glob
-import pyfits
 import csv
 import gzip
 import shutil
@@ -184,7 +183,7 @@ def link_files(dir, indir, outdir, istart, istop, obiroot, skip_slot=None):
             for mfile in match:
                 fitsmatch = re.match('.*fits', mfile)
                 if fitsmatch:
-                    header = pyfits.getheader(mfile)
+                    header = fits.getheader(mfile)
                     if ((istart >= header['tstop'])
                             or (istop <= header['tstart'])):
                         #print "skipping file out of timerange %s" % mfile
