@@ -6,11 +6,12 @@ import pyfits
 import csv
 import gzip
 import shutil
+from itertools import izip, count
+import numpy as np
 
 import Ska.arc5gl
 from Ska.Shell import getenv, bash, tcsh_shell, ShellError
-import Ska.Table
-
+from astropy.io import fits
 
 def get_options():
     from optparse import OptionParser
@@ -286,6 +287,10 @@ def cut_stars(ai):
 
 
 def run_ai(ais):
+    """
+    Run aspect pipeline 'flt_run_pipe' over the aspect intervals described
+    in the list of dictionaries passed as an argument
+    """
     ascds_env = getenv('source /home/ascds/.ascrc -r release', shell='tcsh')
     ocat_env = getenv(
         'source /proj/sot/ska/data/aspect_authorization/set_ascds_ocat_vars.csh',
@@ -323,8 +328,11 @@ def run_ai(ais):
 
 
 def mock_cai_file(opt):
+    """
+    Mock up a Constant Aspect Interval file
+    based on the Kalman intervals in the aiprops files
+    """
     aiprops_files = glob(os.path.join(opt.dir, "asp05/*aipr*"))
-    from astropy.io import fits
     obs_records = []
     colnames = ['obsid', 'pcad_mode', 'aspect_mode',
                 'start_time', 'stop_time']
@@ -333,7 +341,6 @@ def mock_cai_file(opt):
         for row in tbl[tbl['obsid'] == opt.obsid]:
             obs_records.append([row[s] for s in colnames])
 
-    import numpy as np
     ai_rec = np.rec.fromrecords(obs_records, names=colnames)
     acq = np.flatnonzero(ai_rec['aspect_mode'] == 'ACQUISITION')
     gui = np.flatnonzero(ai_rec['aspect_mode'] == 'GUIDE')
@@ -346,7 +353,7 @@ def mock_cai_file(opt):
     if not len(kalman):
         raise ValueError("no kalman intervals in aiprops")
     kalman_intervals = [dict((col, kalman[0][col]) for col in colnames)]
-    from itertools import izip, count
+
     if len(kalman) > 1:
         for k, idx in izip(kalman[1:], count(1)):
             if k['start_time'] == kalman[idx - 1]['stop_time']:
@@ -376,8 +383,6 @@ istop_0,r,h,{},,,""
     fh = open(cai_file, 'w')
     fh.write(cai_text)
     fh.close()
-
-
 
 
 def main(opt):
