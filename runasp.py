@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import os
+import sys
 import re
 from glob import glob
 import pyfits
@@ -12,6 +13,9 @@ import numpy as np
 import Ska.arc5gl
 from Ska.Shell import getenv, bash, tcsh_shell, ShellError
 from astropy.io import fits
+
+_versionfile = os.path.join(os.path.dirname(__file__), 'VERSION')
+VERSION = open(_versionfile).read().strip()
 
 
 def get_options():
@@ -47,6 +51,9 @@ def get_options():
     parser.add_option("--dir",
                       default="pipeline_out",
                       help="directory for telem fetching")
+    parser.add_option("--code-version",
+                      action='store_true',
+                      help="return version of the runasp tool")
     opt, args = parser.parse_args()
     return opt, args
 
@@ -505,4 +512,7 @@ def main(opt):
 
 if __name__ == '__main__':
     opt, args = get_options()
+    if opt.code_version:
+        print VERSION
+        sys.exit(0)
     main(opt)
