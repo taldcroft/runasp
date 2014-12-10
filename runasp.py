@@ -134,7 +134,7 @@ def get_obspar(obsparfile):
     return obspar
 
 
-def dir_setup(dir, istart, label=None):
+def dir_setup(dir, istart, label=None, inplace=False):
     """
     Makes
 
@@ -156,18 +156,20 @@ def dir_setup(dir, istart, label=None):
     rev = 1
     indir = os.path.join(workdir, "in%d" % rev)
     indirs = glob(os.path.join(workdir, "in*"))
-    if len(indirs):
+    if len(indirs) and not inplace:
         rev = len(indirs) + 1
         indir = os.path.join(workdir, "in%d" % rev)
         if os.path.exists(indir):
             raise ValueError("Bad in directory sequence (%s exists)"
                              % indir)
-    os.makedirs(indir)
+    if not os.path.exists(indir):
+        os.makedirs(indir)
     outdir = os.path.join(workdir, "out%d" % rev)
-    if os.path.exists(outdir):
+    if os.path.exists(outdir) and not inplace:
         raise ValueError("Bad in directory sequence (%s exists)"
                          % outdir)
-    os.makedirs(outdir)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
     return workdir, indir, outdir
 
 
@@ -205,6 +207,8 @@ def link_files(dir, indir, outdir, istart, istop, obiroot, skip_slot=None):
                         #print "skipping obspar for different obi"
                         continue
                 #print("ln -s %s %s" % (os.path.relpath(mfile,ldir), ldir))
+                if os.path.exists(os.path.join(ldir, os.path.basename(mfile))):
+                    continue
                 bash("ln -s %s %s" % (os.path.relpath(mfile, ldir), ldir))
 
 
@@ -478,10 +482,15 @@ def main(opt):
             istart = aspect_interval['istart']
             istop = aspect_interval['istop']
             root = "f%09d" % istart
+            # Work inplace?  Only if told to start at a specific pipe
+            inplace = False
+            if opt.pipe_start_at:
+                inplace = True
             # directory setup
             workdir, indir, outdir = dir_setup(opt.dir,
                                                int(istart),
-                                               label=opt.label)
+                                               label=opt.label,
+                                               inplace=inplace)
 
             # if skipping the slot by chucking the telem
             telem_skip_slot = []
