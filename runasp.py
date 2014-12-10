@@ -50,6 +50,10 @@ def get_options():
     parser.add_option("--dir",
                       default="pipeline_out",
                       help="directory for telem fetching")
+    parser.add_option("--pipe-stop-before",
+                      help="stop pipeline before specified pipe")
+    parser.add_option("--pipe-start-at",
+                      help="start pipeline at specified pipe")
     parser.add_option("--code-version",
                       action='store_true',
                       help="return version of the runasp tool")
@@ -307,13 +311,17 @@ def run_ai(ais):
     for ai in ais:
         logfile = os.path.join(ai['outdir'],
                                "{}_pipelog.txt".format(ai['root']))
-        log = open(logfile, 'w')
+        log = open(logfile, 'a')
         pipe_cmd = 'flt_run_pipe -r {root} -i {indir} -o {outdir} \
 -t {pipe_ped} \
 -a "INTERVAL_START"={istart} \
 -a "INTERVAL_STOP"={istop} \
 -a obiroot={obiroot} \
 -a revision=1 '.format(**ai)
+        if 'pipe_start_at' in ai:
+            pipe_cmd = pipe_cmd + " -s {}".format(ai['pipe_start_at'])
+        if 'pipe_stop_before' in ai:
+            pipe_cmd = pipe_cmd + " -S {}".format(ai['pipe_stop_before'])
         if 'skip_slot' in ai:
             try:
                 tcsh_shell(pipe_cmd + " -S check_star_data",
@@ -503,6 +511,10 @@ def main(opt):
                        log="%s_f%09d.log" % (pipe_config['pipe_ped'], istart))
             if len(process_skip_slot):
                 cmd['skip_slot'] = process_skip_slot
+            if opt.pipe_start_at:
+                cmd['pipe_start_at'] = opt.pipe_start_at
+            if opt.pipe_stop_before:
+                cmd['pipe_stop_before'] = opt.pipe_stop_before
 
             ai_cmds.append(cmd)
 
