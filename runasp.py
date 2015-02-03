@@ -11,6 +11,7 @@ import numpy as np
 
 import Ska.arc5gl
 from Ska.Shell import getenv, bash, tcsh_shell, ShellError
+import pyyaks.logger
 from astropy.io import fits
 
 _versionfile = os.path.join(os.path.dirname(__file__), 'VERSION')
@@ -24,16 +25,10 @@ def get_options():
     parser.add_option("--obsid",
                       type='int',
                       help="obsid to process")
-    parser.add_option("--archive",
-                      type='int',
-                      help="obsid to fetch from archive and process")
     parser.add_option("--version",
                       help="version of products")
-    #parser.add_option("--release")
-    #parser.add_option("--clean",
-    #                  action='store_true')
     parser.add_option("--revision",
-                      default="1",
+                      default=1,
                       type="int",
                       help="integer revision label for output")
     parser.add_option("--label",
@@ -57,6 +52,10 @@ def get_options():
     parser.add_option("--code-version",
                       action='store_true',
                       help="return version of the runasp tool")
+    parser.add_option("--log-level",
+                      type='int',
+                      default=20,
+                      help="Log level, default=20 (10=debug, 15=verbose, 20=info, 100=quiet)")
     opt, args = parser.parse_args()
     return opt, args
 
@@ -134,7 +133,7 @@ def get_obspar(obsparfile):
     return obspar
 
 
-def dir_setup(dir, istart, label=None, inplace=False):
+def dir_setup(dir, istart, label=None, inplace=False, rev=1):
     """
     Makes
 
@@ -152,8 +151,11 @@ def dir_setup(dir, istart, label=None, inplace=False):
     else:
         workdir = os.path.join(dir, label)
     if not os.path.exists(workdir):
+        logger.info('Making working directory {}'.format(workdir))
         os.makedirs(workdir)
-    rev = 1
+    else:
+        logger.info('Using existing working directory {}'.format(workdir))
+
     indir = os.path.join(workdir, "in%d" % rev)
     indirs = glob(os.path.join(workdir, "in*"))
     if len(indirs) and not inplace:
@@ -163,6 +165,7 @@ def dir_setup(dir, istart, label=None, inplace=False):
             raise ValueError("Bad in directory sequence (%s exists)"
                              % indir)
     if not os.path.exists(indir):
+        logger.info('Making input directory {}'.format(indir))
         os.makedirs(indir)
     outdir = os.path.join(workdir, "out%d" % rev)
     if os.path.exists(outdir) and not inplace:
@@ -170,6 +173,7 @@ def dir_setup(dir, istart, label=None, inplace=False):
                          % outdir)
     if not os.path.exists(outdir):
         os.makedirs(outdir)
+        logger.info('Making output directory {}'.format(outdir))
     return workdir, indir, outdir
 
 
@@ -192,24 +196,23 @@ def link_files(dir, indir, outdir, istart, istop, obiroot, skip_slot=None):
                     header = fits.getheader(mfile)
                     if ((istart >= header['tstop'])
                             or (istop <= header['tstart'])):
-                        #print "skipping file out of timerange %s" % mfile
+                        logger.verbose("skipping file out of timerange {}".format(mfile))
                         continue
                     aca0 = re.search('aca.*_(\d)_img0', mfile)
                     if skip_slot and aca0:
                         aca_file_slot = int(aca0.group(1))
                         if aca_file_slot in skip_slot:
-                            #print "skipping slot file on %s" % mfile
+                            logger.verbose("skipping slot file on {}".format(mfile))
                             continue
                 obsparmatch = re.match('.*obs0a\.par(\.gz)?', mfile)
                 if obsparmatch:
                     obimatch = re.match('.*axaf%s_obs0a\.par(\.gz)?' % obiroot, mfile)
                     if not obimatch:
-                        #print "skipping obspar for different obi"
+                        logger.verbose("skipping obspar for different obi")
                         continue
-                #print("ln -s %s %s" % (os.path.relpath(mfile,ldir), ldir))
-                if os.path.exists(os.path.join(ldir, os.path.basename(mfile))):
-                    continue
-                bash("ln -s %s %s" % (os.path.relpath(mfile, ldir), ldir))
+                if not os.path.exists(os.path.join(ldir, os.path.basename(mfile))):
+                    logger.info("ln -s {} {}".format(os.path.relpath(mfile, ldir), ldir))
+                    bash("ln -s %s %s" % (os.path.relpath(mfile, ldir), ldir))
 
 
 def make_list_files(dir, indir, outdir, root):
@@ -227,27 +230,28 @@ def make_list_files(dir, indir, outdir, root):
                               ('pcad.lis', 'pcad*eng0*fits*'),
                               ('acis.lis', 'acis*eng0*fits*'),
                               ('obc.lis', 'obc*eng0*fits*')):
-        lfile = open(os.path.join(indir, "%(root)s_%(listend)s"
-                                  % dict(root=root,
-                                         listend=listend)), 'w')
-        sglob = sorted(glob(os.path.join(indir, listglob)))
-        lfile.write("\n".join([os.path.basename(x) for x in sglob]))
-        lfile.close()
+        filename = os.path.join(indir, "{root}_{listend}".format(root=root, listend=listend))
+        logger.info('Writing list file {}'.format(filename))
+        with open(filename, 'w') as lfile:
+            sglob = sorted(glob(os.path.join(indir, listglob)))
+            lfile.write("\n".join([os.path.basename(x) for x in sglob]))
+
     # aca0
-    lfile = open(os.path.join(indir, "%(root)s_tel.lis"
-                              % dict(root=root)), 'w')
-    for slot in [3, 4, 5, 6, 7, 0, 1, 2]:
-        sglob = sorted(glob(os.path.join(indir, 'aca*_%d_*0.fits*' % slot)))
-        telem_lines = '\n'.join([os.path.basename(x) for x in sglob])
-        lfile.write(telem_lines)
-        lfile.write("\n")
-    lfile.close()
+    filename = os.path.join(indir, "{root}_tel.lis".format(root=root))
+    logger.info('Writing list file {}'.format(filename))
+    with open(filename, 'w') as lfile:
+        for slot in [3, 4, 5, 6, 7, 0, 1, 2]:
+            sglob = sorted(glob(os.path.join(indir, 'aca*_%d_*0.fits*' % slot)))
+            telem_lines = '\n'.join([os.path.basename(x) for x in sglob])
+            lfile.write(telem_lines)
+            lfile.write("\n")
+
     # pcad adat in outdir if present
-    lfile = open(os.path.join(outdir, "%(root)s_dat.lis"
-                              % dict(root=root)), 'w')
-    sglob = sorted(glob(os.path.join(indir, 'pcad*adat*fits*')))
-    lfile.write('\n'.join([os.path.basename(x) for x in sglob]))
-    lfile.close()
+    filename = os.path.join(outdir, "{root}_dat.lis".format(root=root))
+    logger.info('Writing list file {}'.format(filename))
+    with open(filename, 'w') as lfile:
+        sglob = sorted(glob(os.path.join(indir, 'pcad*adat*fits*')))
+        lfile.write('\n'.join([os.path.basename(x) for x in sglob]))
 
 
 def get_range_ai(ai_cmds, proc_range):
@@ -296,9 +300,9 @@ def cut_stars(ai):
     for slot in ai['skip_slot']:
         starlines = [i for i in starlines
                      if not re.match("^\s+{}\s+1.*".format(slot), i)]
-    newlist = open(starfiles[0], "w")
-    newlist.write("\n".join(starlines))
-    newlist.close()
+    logger.info('Cutting stars by updating {}'.format(starfiles[0]))
+    with open(starfiles[0], "w") as newlist:
+        newlist.write("\n".join(starlines))
 
 
 def run_ai(ais):
@@ -341,6 +345,7 @@ def run_ai(ais):
                        env=ascds_env,
                        logfile=log)
         else:
+            logger.info('Running pipe command {}'.format(pipe_cmd))
             tcsh_shell(pipe_cmd,
                        env=ascds_env,
                        logfile=log)
@@ -406,21 +411,25 @@ istop_0,r,h,{},,,""
 
 def main(opt):
     # get files
-    if (opt.obsid or opt.archive):
+    if opt.obsid:
+        logger.info('Opening connection to archive server')
         arc5 = Ska.arc5gl.Arc5gl()
         for (prod, query) in pipe_config['archfiles']:
             proddir = os.path.join(opt.dir, prod)
             if not os.path.exists(proddir):
+                logger.info('Creating directory {}'.format(proddir))
                 os.makedirs(proddir)
             else:
-                #print "%s exists skipping..." % prod
+                logger.info('Skipping directory {}: exists'.format(proddir))
                 continue
-            obsid = opt.obsid or opt.archive
-            #arc5.echo = 1
+            obsid = opt.obsid
+            if logger.level < 20:
+                arc5.echo = True
             arc5.sendline("cd %s" % os.path.abspath(proddir))
             arc5.sendline("obsid=%d" % int(obsid))
             if opt.version is not None:
                 arc5.sendline("version=%s" % opt.version)
+            logger.info('Sending "get {}"'.format(query))
             arc5.sendline("get %s" % query)
             gotfiles = glob(os.path.join(proddir, "*"))
             if not len(gotfiles):
@@ -444,6 +453,7 @@ def main(opt):
                                  % fileglob)
             for mfile in match:
                 if re.match(".*\.gz", mfile):
+                    logger.verbose('Unzipping {}'.format(mfile))
                     bash("gunzip -f %s" % os.path.abspath(mfile))
 
     # reset this to get unzipped names
@@ -490,7 +500,8 @@ def main(opt):
             workdir, indir, outdir = dir_setup(opt.dir,
                                                int(istart),
                                                label=opt.label,
-                                               inplace=inplace)
+                                               inplace=inplace,
+                                               rev=opt.revision)
 
             # if skipping the slot by chucking the telem
             telem_skip_slot = []
@@ -531,8 +542,11 @@ def main(opt):
     run_ai(range_ais)
 
 if __name__ == '__main__':
+    global logger
     opt, args = get_options()
     if opt.code_version:
         print VERSION
         sys.exit(0)
+    logger = pyyaks.logger.get_logger(name='runasp', level=opt.log_level,
+                                      format="%(asctime)s %(message)s")
     main(opt)
