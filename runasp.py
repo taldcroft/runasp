@@ -56,6 +56,9 @@ def get_options():
                       type='int',
                       default=20,
                       help="Log level, default=20 (10=debug, 15=verbose, 20=info, 100=quiet)")
+    parser.add_option('--log-file',
+                      default='pipe.log',
+                      help='Log file (default=pipe.log)')
     opt, args = parser.parse_args()
     return opt, args
 
@@ -305,6 +308,30 @@ def cut_stars(ai):
         newlist.write("\n".join(starlines))
 
 
+class FilelikeLogger(object):
+    """
+    Make logger object look a bit file-like for writing
+    """
+    def __init__(self, logger):
+        self.logger = logger
+        for fh in self.logger.handlers:
+            try:
+                self.filename = fh.baseFilename
+                break
+            except AttributeError:
+                pass
+
+    def write(self, value):
+        self.logger.info(value.rstrip())
+
+    def flush(self):
+        for fh in self.logger.handlers:
+            fh.flush()
+
+    def close(self):
+        pass
+
+
 def run_ai(ais):
     """
     Run aspect pipeline 'flt_run_pipe' over the aspect intervals described
@@ -316,10 +343,10 @@ def run_ai(ais):
         shell='tcsh')
     for var in ['ASCDS_OCAT_UNAME', 'ASCDS_OCAT_SERVER', 'ASCDS_OCAT_PWORD']:
         ascds_env[var] = ocat_env[var]
+
+    logger_fh = FilelikeLogger(logger)
+
     for ai in ais:
-        logfile = os.path.join(ai['outdir'],
-                               "{}_pipelog.txt".format(ai['root']))
-        log = open(logfile, 'a')
         pipe_cmd = 'flt_run_pipe -r {root} -i {indir} -o {outdir} \
 -t {pipe_ped} \
 -a "INTERVAL_START"={istart} \
@@ -334,21 +361,21 @@ def run_ai(ais):
             try:
                 tcsh_shell(pipe_cmd + " -S check_star_data",
                            env=ascds_env,
-                           logfile=log)
+                           logfile=logger_fh)
             except ShellError as sherr:
                 # if shell error, just check to see if get_star_data completed successfully
-                loglines = open(logfile).read()
+                loglines = open(logger_fh.filename).read()
                 if not re.search("get_star_data completed successfully", loglines):
                     raise ShellError(sherr)
             cut_stars(ai)
             tcsh_shell(pipe_cmd + " -s check_star_data",
                        env=ascds_env,
-                       logfile=log)
+                       logfile=logger_fh)
         else:
             logger.info('Running pipe command {}'.format(pipe_cmd))
             tcsh_shell(pipe_cmd,
                        env=ascds_env,
-                       logfile=log)
+                       logfile=logger_fh)
 
 
 def mock_cai_file(opt):
@@ -547,6 +574,6 @@ if __name__ == '__main__':
     if opt.code_version:
         print VERSION
         sys.exit(0)
-    logger = pyyaks.logger.get_logger(name='runasp', level=opt.log_level,
-                                      format="%(asctime)s %(message)s")
+    logger = pyyaks.logger.get_logger(name='runasp', level=opt.log_level, filename=opt.log_file,
+                                      filelevel=15, format="%(asctime)s %(message)s")
     main(opt)
