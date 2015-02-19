@@ -454,7 +454,9 @@ def main(opt):
                 arc5.echo = True
             arc5.sendline("cd %s" % os.path.abspath(proddir))
             arc5.sendline("obsid=%d" % int(obsid))
+            logger.info('Sending "obsid={}"'.format(obsid))
             if opt.version is not None:
+                logger.info('Sending "version={}"'.format(opt.version))
                 arc5.sendline("version=%s" % opt.version)
             logger.info('Sending "get {}"'.format(query))
             arc5.sendline("get %s" % query)
