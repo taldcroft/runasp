@@ -574,6 +574,10 @@ if __name__ == '__main__':
     if opt.code_version:
         print VERSION
         sys.exit(0)
+    if opt.pipe_stop_before == 'create_props_files':
+        print """There is a known bug in flt_pctr that can prevent
+a stop at 'create_props_files'.  Choose a different pipe stop."""
+        sys.exit(0)
     logger = pyyaks.logger.get_logger(name='runasp', level=opt.log_level, filename=opt.log_file,
                                       filelevel=15, format="%(asctime)s %(message)s")
     main(opt)
