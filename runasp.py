@@ -397,6 +397,8 @@ def mock_stars_file(opt, ai):
     gui['soe_type'] = 1
     for g in gui[['slot', 'soe_type', 'id', 'yang', 'zang']]:
         full_table.add_row(g)
+    # If we have no stars.txt file, this should be an ER and we shouldn't need
+    # to care about the instrument anyway.
     instr = 'HRC-S' if sc['obs']['sci_instr'] is None else sc['obs']['sci_instr']
     full_table['instr'] = instr
     full_table.write(os.path.join(ai['outdir'], "pcad{}_stars.txt".format(ai['root'])),
