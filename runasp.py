@@ -14,6 +14,7 @@ from Ska.Shell import getenv, bash, tcsh_shell, ShellError
 import pyyaks.logger
 from astropy.io import fits
 from astropy.table import Table
+from mica.starcheck import get_starcheck_catalog_at_date
 
 _versionfile = os.path.join(os.path.dirname(__file__), 'VERSION')
 VERSION = open(_versionfile).read().strip()
@@ -379,7 +380,6 @@ def mock_stars_file(opt, ai):
     """
     Mock up the stars.txt file if one was not made automatically
     """
-    from mica.starcheck import get_starcheck_catalog_at_date
     sc = get_starcheck_catalog_at_date(ai['istart'])
 
     acqs = sc['cat'][(sc['cat']['type'] == 'ACQ') | (sc['cat']['type'] == 'BOT')]
