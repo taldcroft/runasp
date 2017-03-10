@@ -13,6 +13,7 @@ import Ska.arc5gl
 from Ska.Shell import getenv, bash, tcsh_shell, ShellError
 import pyyaks.logger
 from astropy.io import fits
+from astropy.table import Table
 
 _versionfile = os.path.join(os.path.dirname(__file__), 'VERSION')
 VERSION = open(_versionfile).read().strip()
@@ -357,25 +358,49 @@ def run_ai(ais):
             pipe_cmd = pipe_cmd + " -s {}".format(ai['pipe_start_at'])
         if 'pipe_stop_before' in ai:
             pipe_cmd = pipe_cmd + " -S {}".format(ai['pipe_stop_before'])
+        logger.info('Running pipe command {}'.format(pipe_cmd + ' -S check_star_data'))
+        tcsh_shell(pipe_cmd + " -S check_star_data",
+                   env=ascds_env,
+                   logfile=logger_fh)
+        star_files = glob(os.path.join(ai['outdir'], "*stars.txt"))
+        if not len(star_files) == 1:
+            logger.info("Missing stars.txt, mocking one up from mica starcheck database")
+            mock_stars_file(opt, ai)
         if 'skip_slot' in ai:
-            try:
-                tcsh_shell(pipe_cmd + " -S check_star_data",
-                           env=ascds_env,
-                           logfile=logger_fh)
-            except ShellError as sherr:
-                # if shell error, just check to see if get_star_data completed successfully
-                loglines = open(logger_fh.filename).read()
-                if not re.search("get_star_data completed successfully", loglines):
-                    raise ShellError(sherr)
+            logger.info("Cutting star as requested")
             cut_stars(ai)
-            tcsh_shell(pipe_cmd + " -s check_star_data",
-                       env=ascds_env,
-                       logfile=logger_fh)
-        else:
-            logger.info('Running pipe command {}'.format(pipe_cmd))
-            tcsh_shell(pipe_cmd,
-                       env=ascds_env,
-                       logfile=logger_fh)
+        logger.info('Running pipe command {}'.format(pipe_cmd + " -s check_star_data"))
+        tcsh_shell(pipe_cmd + " -s check_star_data",
+                   env=ascds_env,
+                   logfile=logger_fh)
+
+
+def mock_stars_file(opt, ai):
+    """
+    Mock up the stars.txt file if one was not made automatically
+    """
+    from mica.starcheck import get_starcheck_catalog_at_date
+    sc = get_starcheck_catalog_at_date(ai['istart'])
+
+    acqs = sc['cat'][(sc['cat']['type'] == 'ACQ') | (sc['cat']['type'] == 'BOT')]
+    acqs.sort('slot')
+    acqs['soe_type'] = 0
+    full_table = acqs[['slot', 'soe_type', 'id', 'yang', 'zang']]
+    fids = sc['cat'][sc['cat']['type'] == 'FID']
+    if len(fids):
+        fids.sort('slot')
+        fids['soe_type'] = 2
+        for f in fids[['slot', 'soe_type', 'id', 'yang', 'zang']]:
+            full_table.add_row(f)
+    gui = sc['cat'][(sc['cat']['type'] == 'BOT') | (sc['cat']['type'] == 'GUI')]
+    gui.sort('slot')
+    gui['soe_type'] = 1
+    for g in gui[['slot', 'soe_type', 'id', 'yang', 'zang']]:
+        full_table.add_row(g)
+    instr = 'HRC-S' if sc['obs']['sci_instr'] is None else sc['obs']['sci_instr']
+    full_table['instr'] = instr
+    full_table.write(os.path.join(ai['outdir'], "pcad{}_stars.txt".format(ai['root'])),
+                     format='ascii.no_header')
 
 
 def mock_cai_file(opt):
