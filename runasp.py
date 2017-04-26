@@ -423,8 +423,8 @@ def mock_cai_file(opt):
     acq = np.flatnonzero(ai_rec['aspect_mode'] == 'ACQUISITION')
     gui = np.flatnonzero(ai_rec['aspect_mode'] == 'GUIDE')
     if len(acq) and len(gui):
-        kalman_mask = ((np.arange(len(ai_rec)) > acq)
-                       & (np.arange(len(ai_rec)) > gui)
+        kalman_mask = ((np.arange(len(ai_rec)) > np.max(acq))
+                       & (np.arange(len(ai_rec)) > np.max(gui))
                        & (ai_rec['pcad_mode'] == 'NPNT')
                        & (ai_rec['aspect_mode'] == 'KALMAN'))
         kalman = ai_rec[kalman_mask]
